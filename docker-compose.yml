@@ -1,0 +1,97 @@
+version: '3.7'
+
+services:
+  mysql:
+    image: mariadb:10.5.10-focal
+    container_name: dockerssl_mysql
+    restart: "no"
+    ports:
+      - 3306:3306
+    volumes:
+      - ./mysql:/var/lib/mysql
+      - ./rf_blog2_prod.sql:/docker-entrypoint-initdb.d/init.sql # prepopulate database
+    environment:
+      MYSQL_DATABASE: database_name
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: username
+      MYSQL_PASSWORD: password
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    depends_on:
+      - mysql
+    container_name: dockerssl_phpmyadmin
+    environment:
+      - PMA_HOST=mysql
+      - PMA_ARBITRARY=1
+      - PMA_USER=username
+      - PMA_PASSWORD=password
+    restart: "no"
+    ports:
+      - 8090:80
+
+  composer:
+    image: composer:latest
+    volumes:
+      - ./wordpress:/app
+    command: composer install
+
+  wordpress:
+    image: wordpress:5.7.2-fpm-alpine
+    depends_on:
+      - composer
+      - mysql
+    container_name: dockerssl_wordpress
+    ports:
+      - 9000:9000
+    working_dir: /var/www/html
+    restart: on-failure:5
+    volumes:
+      - ./wordpress:/var/www/html
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+    environment:     
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_NAME: database_name
+      WORDPRESS_DB_USER: username
+      WORDPRESS_DB_PASSWORD: password
+      WORDPRESS_TABLE_PREFIX: wp_
+      WORDPRESS_DEBUG: 1
+      WORDPRESS_DEBUG_DISPLAY: 1
+      WORDPRESS_DEBUG_LOG: 1
+      XDEBUG_CONFIG: remote_host=192.168.1.2
+  
+  # here is our mailhog container
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: dockerssl_mailhog
+    ports:
+      - "8025:8025"
+
+  nginx:
+    image: nginx:latest
+    container_name: dockerssl_nginx
+    depends_on:
+      - wordpress
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs
+      - ./logs/nginx:/var/log/nginx
+      - ./wordpress:/var/www/html
+    # environment:
+      # - NGINX_HOST=dockerssl.test
+      # - NGINX_PORT=443
+    links:
+      - wordpress
+    restart: "no"
+    
+volumes:
+  mysql:
+  mailhog:
+  wordpress:
+
+
+    
